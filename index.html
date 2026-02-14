@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CS Aim Trainer - Damian Kita</title>
+    <style>
+        :root {
+            --cs-bg: #1b1e23;
+            --cs-yellow: #de9b35;
+            --cs-text: #b8babd;
+            --cs-green: #5ce65c;
+            --cs-red: #e04040;
+            --overlay-bg: rgba(20, 20, 25, 0.95);
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--cs-bg);
+            color: var(--cs-text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            cursor: crosshair;
+        }
+
+        /* --- UI ELEMENTS --- */
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at center, #2b3038 0%, #15171a 100%);
+            overflow: hidden;
+        }
+
+        .hud-panel {
+            position: absolute;
+            bottom: 20px;
+            display: flex;
+            gap: 20px;
+            pointer-events: none; /* Allows shooting through HUD */
+            width: 100%;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        .hud-box {
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 10px 20px;
+            border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 80px;
+        }
+
+        .hud-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            color: #888;
+            letter-spacing: 1px;
+        }
+
+        .hud-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--cs-yellow);
+        }
+
+        /* Ammo specific */
+        #ammo-box .hud-value {
+            color: var(--cs-green);
+        }
+        #ammo-box.low-ammo .hud-value {
+            color: var(--cs-red);
+        }
+
+        /* --- CROSSHAIR --- */
+        #crosshair {
+            position: fixed;
+            pointer-events: none;
+            width: 20px;
+            height: 20px;
+            transform: translate(-50%, -50%);
+            z-index: 100;
+            display: none; /* Hidden on mobile by default usually, but we keep for desktop */
+        }
+        
+        @media (hover: hover) {
+            #crosshair { display: block; }
+            body { cursor: none; }
+        }
+
+        .ch-line {
+            background-color: var(--cs-green);
+            position: absolute;
+            box-shadow: 0 0 2px black;
+        }
+        .ch-h { width: 100%; height: 2px; top: 50%; left: 0; transform: translateY(-50%); }
+        .ch-v { height: 100%; width: 2px; left: 50%; top: 0; transform: translateX(-50%); }
+
+        /* --- TARGETS --- */
+        .target {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #ffcd7a, #cf8d2e);
+            border: 2px solid #5e3f10;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* Headshot visual */
+        .target::after {
+            content: '';
+            width: 100%;
+            height: 100%;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'%3E%3C/path%3E%3Ccircle cx='9' cy='7' r='4'%3E%3C/circle%3E%3Cpath d='M23 21v-2a4 4 0 0 0-3-3.87'%3E%3C/path%3E%3Cpath d='M16 3.13a4 4 0 0 1 0 7.75'%3E%3C/path%3E%3C/svg%3E");
+            background-size: 60%;
+            background-repeat: no-repeat;
+            background-position: center;
+            opacity: 0.5;
+        }
+
+        .target.hit {
+            transform: scale(1.2);
+            opacity: 0;
+            transition: all 0.1s ease-out;
+            background: var(--cs-red);
+        }
+
+        @keyframes popIn {
+            from { transform: scale(0); }
+            to { transform: scale(1); }
+        }
+
+        /* --- MENUS --- */
+        .screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--overlay-bg);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 50;
+            text-align: center;
+            backdrop-filter: blur(5px);
+        }
+
+        .hidden { display: none !important; }
+
+        h1 {
+            font-size: 48px;
+            color: var(--cs-yellow);
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px rgba(222, 155, 53, 0.3);
+        }
+
+        p { color: #ccc; margin-bottom: 30px; font-size: 18px; }
+
+        .btn {
+            background: rgba(222, 155, 53, 0.1);
+            border: 1px solid var(--cs-yellow);
+            color: var(--cs-yellow);
+            padding: 15px 40px;
+            font-size: 20px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: bold;
+            margin: 10px;
+        }
+
+        .btn:hover {
+            background: var(--cs-yellow);
+            color: #000;
+            box-shadow: 0 0 15px var(--cs-yellow);
+        }
+
+        .author-info {
+            position: absolute;
+            bottom: 20px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .author-info a {
+            color: var(--cs-yellow);
+            text-decoration: none;
+        }
+
+        /* --- MOBILE CONTROLS --- */
+        #mobile-reload {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            display: none; /* Flex on mobile */
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            z-index: 20;
+            touch-action: manipulation;
+        }
+
+        #mobile-reload:active {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        @media (max-width: 768px) {
+            #mobile-reload { display: flex; }
+            h1 { font-size: 32px; }
+            .target { width: 50px; height: 50px; }
+        }
+
+        /* --- HIT MARKER --- */
+        .hit-marker {
+            position: absolute;
+            pointer-events: none;
+            color: var(--cs-red);
+            font-weight: bold;
+            font-size: 20px;
+            animation: floatUp 0.5s ease-out forwards;
+            z-index: 15;
+            text-shadow: 1px 1px 0 #000;
+        }
+
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-30px) scale(1.5); opacity: 0; }
+        }
+        
+        .muzzle-flash {
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            background: white;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 90;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- CROSSHAIR -->
+    <div id="crosshair">
+        <div class="ch-line ch-h"></div>
+        <div class="ch-line ch-v"></div>
+    </div>
+
+    <!-- FLASH EFFECT -->
+    <div id="flash" class="muzzle-flash"></div>
+
+    <!-- GAME CONTAINER -->
+    <div id="game-container">
+        <!-- Targets will spawn here -->
+        
+        <!-- UI -->
+        <div class="hud-panel">
+            <div class="hud-box">
+                <span class="hud-label">Wynik</span>
+                <span class="hud-value" id="score-val">0</span>
+            </div>
+            <div class="hud-box">
+                <span class="hud-label">Czas</span>
+                <span class="hud-value" id="time-val">60</span>
+            </div>
+            <div class="hud-box" id="ammo-box">
+                <span class="hud-label">Amunicja</span>
+                <span class="hud-value" id="ammo-val">12/30</span>
+            </div>
+        </div>
+
+        <button id="mobile-reload">↻</button>
+    </div>
+
+    <!-- START SCREEN -->
+    <div id="start-screen" class="screen">
+        <h1>CS Aim Trainer</h1>
+        <p>Zestrzel jak najwięcej celów przed upływem czasu.</p>
+        <p style="font-size: 14px; color: #888;">PC: [LPM] Strzał | [R] Przeładowanie<br>Mobile: [Dotknij] Strzał | [Przycisk] Przeładowanie</p>
+        <button class="btn" onclick="startGame()">GRAJ</button>
+        
+        <div class="author-info">
+            Autor: Damian Kita (<a href="https://linktr.ee/kitadamian" target="_blank">linktr.ee/kitadamian</a>)
+        </div>
+    </div>
+
+    <!-- GAME OVER SCREEN -->
+    <div id="game-over-screen" class="screen hidden">
+        <h1>Koniec Gry</h1>
+        <p>Twój wynik: <span id="final-score" style="color: var(--cs-yellow); font-weight: bold;">0</span></p>
+        <p>Celność: <span id="accuracy" style="color: white;">0%</span></p>
+        <button class="btn" onclick="startGame()">Zagraj Ponownie</button>
+        <div class="author-info">
+            Autor: Damian Kita (<a href="https://linktr.ee/kitadamian" target="_blank">linktr.ee/kitadamian</a>)
+        </div>
+    </div>
+
+    <script>
+        // --- GAME CONFIG ---
+        const GAME_DURATION = 60;
+        const MAG_SIZE = 7; // Small mag to force reloads
+        const TOTAL_AMMO = 999;
+        const SPAWN_RATE = 800; // ms
+        
+        // --- STATE ---
+        let score = 0;
+        let timeLeft = GAME_DURATION;
+        let currentAmmo = MAG_SIZE;
+        let isReloading = false;
+        let isPlaying = false;
+        let shotsFired = 0;
+        let shotsHit = 0;
+        let spawnInterval;
+        let timeInterval;
+        
+        // --- DOM ELEMENTS ---
+        const container = document.getElementById('game-container');
+        const scoreEl = document.getElementById('score-val');
+        const timeEl = document.getElementById('time-val');
+        const ammoEl = document.getElementById('ammo-val');
+        const ammoBox = document.getElementById('ammo-box');
+        const crosshair = document.getElementById('crosshair');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const finalScoreEl = document.getElementById('final-score');
+        const accuracyEl = document.getElementById('accuracy');
+        const flashEl = document.getElementById('flash');
+
+        // --- AUDIO SYSTEM (Web Audio API) ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new AudioContext();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        // Sound Synthesis Functions
+        function playShootSound() {
+            if(!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            const filter = audioCtx.createBiquadFilter();
+
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(1000, audioCtx.currentTime);
+            filter.frequency.linearRampToValueAtTime(100, audioCtx.currentTime + 0.1);
+
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.2);
+
+            // Reverb/Echo effect simulation
+            const osc2 = audioCtx.createOscillator();
+            const gain2 = audioCtx.createGain();
+            osc2.type = 'square';
+            osc2.frequency.setValueAtTime(50, audioCtx.currentTime);
+            gain2.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+            osc2.connect(gain2);
+            gain2.connect(audioCtx.destination);
+            osc2.start();
+            osc2.stop(audioCtx.currentTime + 0.3);
+        }
+
+        function playReloadSound() {
+            if(!audioCtx) return;
+            const t = audioCtx.currentTime;
+            
+            // Clip out
+            createClick(t);
+            // Clip in
+            setTimeout(() => createClick(audioCtx.currentTime), 400);
+            // Slide pull
+            setTimeout(() => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(600, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.2);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.2);
+            }, 800);
+        }
+
+        function createClick(time) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'square';
+            osc.frequency.value = 800;
+            gain.gain.setValueAtTime(0.1, time);
+            gain.gain.exponentialRampToValueAtTime(0.01, time + 0.05);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(time);
+            osc.stop(time + 0.05);
+        }
+
+        function playHitSound() {
+            if(!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        function playEmptySound() {
+            if(!audioCtx) return;
+            createClick(audioCtx.currentTime);
+        }
+
+        function playMusic() {
+            if(!audioCtx) return;
+            // Create a very subtle drone for tension
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            const filter = audioCtx.createBiquadFilter();
+            
+            osc.type = 'sawtooth';
+            osc.frequency.value = 50;
+            filter.type = 'lowpass';
+            filter.frequency.value = 200;
+            
+            gain.gain.value = 0.03;
+            
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            
+            // Return node to stop later if needed (we keep it running for atmosphere)
+            return osc;
+        }
+
+        // --- GAME LOGIC ---
+
+        function startGame() {
+            initAudio();
+            playMusic();
+            
+            // Reset State
+            score = 0;
+            timeLeft = GAME_DURATION;
+            currentAmmo = MAG_SIZE;
+            shotsFired = 0;
+            shotsHit = 0;
+            isReloading = false;
+            isPlaying = true;
+
+            // UI Updates
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            updateHUD();
+
+            // Clear existing targets
+            document.querySelectorAll('.target').forEach(e => e.remove());
+            document.querySelectorAll('.hit-marker').forEach(e => e.remove());
+
+            // Loops
+            spawnInterval = setInterval(spawnTarget, SPAWN_RATE);
+            timeInterval = setInterval(updateTime, 1000);
+            
+            // Initial spawn
+            spawnTarget();
+        }
+
+        function gameOver() {
+            isPlaying = false;
+            clearInterval(spawnInterval);
+            clearInterval(timeInterval);
+            
+            gameOverScreen.classList.remove('hidden');
+            finalScoreEl.innerText = score;
+            
+            let acc = shotsFired > 0 ? Math.round((shotsHit / shotsFired) * 100) : 0;
+            accuracyEl.innerText = acc + "%";
+        }
+
+        function updateTime() {
+            timeLeft--;
+            timeEl.innerText = timeLeft;
+            if(timeLeft <= 10) {
+                timeEl.style.color = 'var(--cs-red)';
+            } else {
+                timeEl.style.color = 'var(--cs-yellow)';
+            }
+
+            if (timeLeft <= 0) {
+                gameOver();
+            }
+        }
+
+        function updateHUD() {
+            scoreEl.innerText = score;
+            ammoEl.innerText = `${currentAmmo}/${MAG_SIZE}`;
+            
+            if (currentAmmo <= 2) {
+                ammoBox.classList.add('low-ammo');
+            } else {
+                ammoBox.classList.remove('low-ammo');
+            }
+        }
+
+        function spawnTarget() {
+            if (!isPlaying) return;
+
+            // Limit max targets to prevent lag
+            if (document.querySelectorAll('.target').length > 8) return;
+
+            const target = document.createElement('div');
+            target.classList.add('target');
+            
+            // Random Position (keep away from edges)
+            const x = Math.random() * (container.clientWidth - 80) + 10;
+            const y = Math.random() * (container.clientHeight - 150) + 10; // Avoid HUD
+            
+            target.style.left = x + 'px';
+            target.style.top = y + 'px';
+
+            // Scale target based on life time (shrink difficulty)
+            // or just simple pop in
+            
+            target.addEventListener('mousedown', (e) => handleHit(e, target));
+            target.addEventListener('touchstart', (e) => {
+                e.preventDefault(); // prevent mouse emulation
+                handleHit(e, target);
+            }, {passive: false});
+
+            container.appendChild(target);
+
+            // Remove target after some time if not hit (optional difficulty)
+            setTimeout(() => {
+                if(target && target.parentNode) {
+                    target.style.transform = "scale(0)";
+                    setTimeout(() => target.remove(), 200);
+                }
+            }, 3000 + Math.random() * 2000);
+        }
+
+        function handleHit(e, target) {
+            e.stopPropagation(); // Don't trigger background shoot
+            if (!isPlaying || isReloading) return;
+
+            if (currentAmmo > 0) {
+                // Register Hit Logic inside shoot mechanic, 
+                // but visually handle target here
+                shoot(true, e.clientX || e.touches[0].clientX, e.clientY || e.touches[0].clientY);
+                
+                target.classList.add('hit');
+                // Disable further clicks
+                target.style.pointerEvents = 'none';
+                
+                score += 100;
+                shotsHit++;
+                
+                // Spawn hit marker
+                const marker = document.createElement('div');
+                marker.classList.add('hit-marker');
+                marker.innerText = "+100";
+                marker.style.left = (e.clientX || e.touches[0].clientX) + 'px';
+                marker.style.top = (e.clientY || e.touches[0].clientY) + 'px';
+                container.appendChild(marker);
+                
+                setTimeout(() => marker.remove(), 500);
+                setTimeout(() => target.remove(), 100);
+                
+                updateHUD();
+            } else {
+                playEmptySound();
+            }
+        }
+
+        function shoot(hitSomething = false, x, y) {
+            if (isReloading) return;
+            
+            if (currentAmmo > 0) {
+                currentAmmo--;
+                shotsFired++;
+                playShootSound();
+                updateHUD();
+                
+                // Recoil / Flash effect
+                flashEl.style.opacity = 0.4;
+                setTimeout(() => flashEl.style.opacity = 0, 50);
+                
+                // Crosshair bloom (visual recoil)
+                crosshair.style.transform = "translate(-50%, -50%) scale(1.5)";
+                setTimeout(() => crosshair.style.transform = "translate(-50%, -50%) scale(1)", 100);
+
+            } else {
+                playEmptySound();
+                reload();
+            }
+        }
+
+        function reload() {
+            if (isReloading || currentAmmo === MAG_SIZE) return;
+            
+            isReloading = true;
+            ammoEl.innerText = "RELOAD...";
+            playReloadSound();
+            
+            // CSS Animation for reload?
+            crosshair.style.opacity = 0.3;
+
+            setTimeout(() => {
+                currentAmmo = MAG_SIZE;
+                isReloading = false;
+                crosshair.style.opacity = 1;
+                updateHUD();
+            }, 1200); // 1.2s reload time
+        }
+
+        // --- INPUT HANDLING ---
+
+        // Mouse Movement (Custom Crosshair)
+        document.addEventListener('mousemove', (e) => {
+            if (isPlaying) {
+                crosshair.style.left = e.clientX + 'px';
+                crosshair.style.top = e.clientY + 'px';
+            }
+        });
+
+        // Shooting Background (Miss)
+        container.addEventListener('mousedown', (e) => {
+            if (!isPlaying || isReloading) return;
+            // If we clicked a target, handleHit fired already due to propagation order/logic
+            // But we used stopPropagation in handleHit. 
+            // So if we are here, we missed.
+            if(e.target === container) {
+                if(currentAmmo > 0) {
+                    shoot(false);
+                } else {
+                    playEmptySound();
+                    reload();
+                }
+            }
+        });
+
+        // Touch for background (Miss)
+        container.addEventListener('touchstart', (e) => {
+            if (!isPlaying || isReloading) return;
+            if(e.target === container) {
+                e.preventDefault();
+                if(currentAmmo > 0) {
+                    shoot(false);
+                } else {
+                    playEmptySound();
+                    reload();
+                }
+            }
+        }, {passive: false});
+
+        // Reload Keys
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'KeyR') reload();
+        });
+
+        document.getElementById('mobile-reload').addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            reload();
+        }, {passive: false});
+
+    </script>
+</body>
+</html>
